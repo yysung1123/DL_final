@@ -36,22 +36,26 @@ class Vocabulary(object):
 
 
 class Corpus:
-    def __init__(self):
+    def __init__(self, chapters):
         super().__init__()
         self.corpus = [parse(i) for i in range(1, 121)]
+        self.chapters = chapters
+        self.chapter2label = {}
+        for idx, chapter in enumerate(self.chapters):
+            self.chapter2label[chapter] = idx
         self.sentences = []
         for idx, chapter in enumerate(self.corpus):
+            if idx // 10 not in self.chapters:
+                continue
             for sentence in chapter:
-                self.sentences.append((sentence, idx + 1))
+                self.sentences.append((sentence, self.chapter2label[idx // 10]))
+        shuffle(self.sentences)
         self.vocab = self._build_vocab()
         self.train_size = len(self.sentences) * 9 // 10
         self.test_size = len(self.sentences) - self.train_size
         self.train = self.sentences[:self.train_size]
         self.test = self.sentences[self.train_size:]
-        self.sen_len = 0
-        for chapter in self.corpus:
-            for sentence in chapter:
-                self.sen_len = max(self.sen_len, len(sentence))
+        self.sen_len = 64
 
     def _build_vocab(self):
         cnt = Counter()
@@ -59,7 +63,7 @@ class Corpus:
             for sentence in chapter:
                 for word in sentence:
                     cnt[word] += 1
-        words = [word for word, cnt in cnt.items() if cnt >= 5]
+        words = [word for word, cnt in cnt.items() if cnt >= 3]
 
         vocab = Vocabulary()
         vocab.add_word('<pad>')
@@ -80,49 +84,33 @@ class TextDataset(Dataset):
     def __getitem__(self, index):
         txt = torch.LongTensor(np.zeros(self.corpus.sen_len, dtype=np.int64))
         for idx, word in enumerate(self.sentences[index][0]):
+            if idx >= self.corpus.sen_len:
+                break
             txt[idx] = self.corpus.vocab(word)
-        label = torch.LongTensor([(self.sentences[index][1] - 1) // 40])
-        sen_len = len(self.sentences[index][0])
+        label = torch.LongTensor([self.sentences[index][1]])
+        sen_len = min(self.corpus.sen_len, len(self.sentences[index][0]))
         return txt, label, sen_len
 
 
     def __len__(self):
         return len(self.sentences)
 
-
-class TextDataLoader:
-    def __init__(self, dataset, batch_size):
-        self.batch_size = batch_size
-        self.samples = [i for i in dataset]
-        self.n_samples = len(self.samples)
-        self.n_batches = self.n_samples // self.batch_size
-
-
-    def _shuffle_indices(self):
-        self.indices = np.random.permutation(self.n_samples)
-        self.index = 0
-        self.batch_index = 0
+def choose_chapters1():
+    chapters = list(range(8))
+    shuffle(chapters)
+    for idx in range(4, 8):
+        chapters[idx] = idx + 4
+    print_chapter(chapters)
+    return chapters
 
 
-    def _create_batch(self):
-        batch_input = []
-        batch_target = []
-        batch_len = []
-        n = 0
-        while n < self.batch_size:
-            _index = self.indices[self.index]
-            batch_input.append(self.samples[_index][0])
-            batch_target.append(self.samples[_index][1])
-            batch_len.append(self.samples[_index][1])
-            self.index += 1
-            n += 1
-        self.batch_index += 1
-        return batch_input, batch_target, batch_len
+def choose_chapters2():
+    chapters = list(range(8))
+    shuffle(chapters)
+    print_chapter(chapters)
+    return chapters
 
-
-    def __iter__(self):
-        self._shuffle_indices()
-        for i in range(self.n_batches):
-            if self.batch_index == self.n_batches:
-                raise StopIteration()
-            yield self._create_batch()
+def print_chapter(chapters):
+    print("choose chapters:")
+    for label in chapters:
+        print("{}~{}".format(label * 10 + 1, (label + 1) * 10))

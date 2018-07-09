@@ -5,13 +5,13 @@ import torch
 import torch.nn.functional as F
 
 
-class LSTMNet(nn.Module):
+class GRUNet(nn.Module):
     def __init__(self, embedding_dim, hidden_dim, vocab_size, label_size, batch_size):
         super().__init__()
         self.hidden_dim = hidden_dim
         self.batch_size = batch_size
         self.word_embedding = nn.Embedding(vocab_size, embedding_dim)
-        self.lstm = nn.LSTM(embedding_dim, hidden_dim, batch_first=True, bidirectional=False, num_layers=2, dropout=0.5)
+        self.gru = nn.GRU(embedding_dim, hidden_dim, batch_first=True, bidirectional=False, num_layers=2, dropout=0.5)
         self.fc1 = nn.Linear(hidden_dim, hidden_dim * 4)
         self.fc2 = nn.Linear(hidden_dim * 4, label_size)
 
@@ -22,18 +22,13 @@ class LSTMNet(nn.Module):
         _, desorted_indices = torch.sort(indices, descending=False)
         embedded = self.word_embedding(input)
         packed = nn.utils.rnn.pack_padded_sequence(embedded, sorted_lens, batch_first=True)
-        outputs, hidden = self.lstm(packed, hidden)
-#        outputs, hidden = self.lstm(embedded, hidden)
+        outputs, hidden = self.gru(packed, hidden)
         outputs, _ = nn.utils.rnn.pad_packed_sequence(outputs, batch_first=True)
         outputs = outputs[desorted_indices]
-#         row_indices = torch.arange(0, self.batch_size).long()
-#         col_indices = input_lens - 1
-#         row_indices = row_indices.cuda()
-#         col_indices = col_indices.cuda()
-#         last_tensor = outputs[row_indices, col_indices, :]
         outputs = torch.sum(outputs, dim=1)
         for idx in range(len(input_lens)):
             outputs[idx] /= input_lens[idx].float()
         out = F.leaky_relu(self.fc1(outputs))
         out = self.fc2(out)
         return out
+
